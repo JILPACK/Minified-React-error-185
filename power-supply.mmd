@@ -1,0 +1,92 @@
+title Power Supply Conversion & Delivery Process
+
+Power Source [color: gray] {
+  Supply {
+    Provide input energy [type: activity, icon: zap]
+    Input available [type: event, icon: plug]
+  }
+}
+
+Power Supply Unit [color: blue] {
+  Input Stage {
+    Receive input power [type: activity, icon: plug]
+    Identify input type [type: activity, icon: search]
+    AC or DC? [type: gateway, icon: x]
+    Accept AC mains / grid [type: activity, icon: power]
+    Accept DC source [type: activity, icon: battery]
+  }
+  Conversion {
+    Select conversion method [type: gateway, icon: x]
+    Linear path [type: activity, icon: trending-down]
+    Transform (mains frequency) [type: activity, icon: refresh-cw]
+    Rectify [type: activity, icon: activity]
+    Filter (capacitors / pi) [type: activity, icon: filter]
+    Linear regulate [type: activity, icon: sliders]
+    Switched-mode path [type: activity, icon: cpu]
+    Rectify & filter input [type: activity, icon: activity]
+    High-frequency switching [type: activity, icon: repeat]
+    High-freq transform / induct [type: activity, icon: refresh-cw]
+    Rectify high-freq output [type: activity, icon: activity]
+    Feedback regulate (duty cycle) [type: activity, icon: sliders]
+  }
+  Optional Functions {
+    Apply protections? [type: gateway, icon: x]
+    Current limiting / foldback [type: activity, icon: minus-circle]
+    Fault protection (SCP/OCP/OVP/OTP) [type: activity, icon: shield]
+    Power conditioning / noise filter [type: activity, icon: filter]
+    Power factor correction [type: activity, icon: bar-chart]
+    Energy storage / UPS backup [type: activity, icon: battery-charging]
+  }
+  Output Stage {
+    Deliver regulated power [type: activity, icon: send]
+    Output rails ready [type: event, icon: check-circle]
+  }
+}
+
+Load [color: green] {
+  Consumption {
+    Receive power [type: activity, icon: zap]
+    Draw current [type: activity, icon: activity]
+    Load powered [type: event, icon: smile]
+  }
+}
+
+// Source to Input
+Provide input energy > Input available
+Input available > Receive input power
+Receive input power > Identify input type
+Identify input type > AC or DC?
+AC or DC? > Accept AC mains / grid : AC
+AC or DC? > Accept DC source : DC
+Accept AC mains / grid > Select conversion method
+Accept DC source > Select conversion method
+
+// Conversion paths
+Select conversion method > Linear path : Linear
+Select conversion method > Switched-mode path : Switching
+Linear path > Transform (mains frequency)
+Transform (mains frequency) > Rectify
+Rectify > Filter (capacitors / pi)
+Filter (capacitors / pi) > Linear regulate
+Linear regulate > Apply protections?
+Switched-mode path > Rectify & filter input
+Rectify & filter input > High-frequency switching
+High-frequency switching > High-freq transform / induct
+High-freq transform / induct > Rectify high-freq output
+Rectify high-freq output > Feedback regulate (duty cycle)
+Feedback regulate (duty cycle) > Apply protections?
+
+// Optional functions
+Apply protections? > Current limiting / foldback : Yes
+Apply protections? > Deliver regulated power : No
+Current limiting / foldback > Fault protection (SCP/OCP/OVP/OTP)
+Fault protection (SCP/OCP/OVP/OTP) > Power conditioning / noise filter
+Power conditioning / noise filter > Power factor correction
+Power factor correction > Energy storage / UPS backup
+Energy storage / UPS backup > Deliver regulated power
+
+// Output to Load
+Deliver regulated power > Output rails ready
+Output rails ready > Receive power
+Receive power > Draw current
+Draw current > Load powered
