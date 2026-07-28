@@ -9,6 +9,7 @@ import math
 import random
 import time
 import webbrowser
+import json as json_mod
 
 ROOT = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, ROOT)
@@ -710,6 +711,7 @@ class FluxGUI:
         self._build_projects_tab()
         self._build_fluxlang_tab()
         self._build_visuals_tab()
+        self._build_worker_tab()
 
         self.root.protocol("WM_DELETE_WINDOW", self.on_close)
 
@@ -1167,7 +1169,230 @@ class FluxGUI:
             self.phys_explanation.set(t)
         ), 80)
 
+    # ── Tab 4: Worker Mini ────────────────────────────────────────────────
+
+    def _build_worker_tab(self):
+        frame = ttk.Frame(self.notebook)
+        self.notebook.add(frame, text="  Worker IA  ")
+
+        panes = ttk.PanedWindow(frame, orient=tk.HORIZONTAL)
+        panes.pack(fill=tk.BOTH, expand=True, padx=6, pady=6)
+
+        left = ttk.Frame(panes, width=500)
+        panes.add(left, weight=1)
+
+        # Control bar
+        ctrl = ttk.Frame(left)
+        ctrl.pack(fill=tk.X)
+        ttk.Label(ctrl, text="Ministral 3.3B — Worker IA", font=("Segoe UI", 10, "bold"),
+                  foreground="#cccccc").pack(side=tk.LEFT)
+        self.worker_status_lbl = ttk.Label(ctrl, text="🔴 Arrêté", foreground="#f44747",
+                                           font=("Segoe UI", 9, "bold"))
+        self.worker_status_lbl.pack(side=tk.RIGHT, padx=(8, 0))
+        self.w_start_btn = ttk.Button(ctrl, text="▶ Lancer", command=self._worker_toggle)
+        self.w_start_btn.pack(side=tk.RIGHT, padx=2)
+        ttk.Button(ctrl, text="🔄 Health", command=self._worker_health).pack(side=tk.RIGHT, padx=2)
+
+        # Chat area
+        chat_label = ttk.Label(left, text="Chat avec le modèle (API locale)",
+                               font=("Segoe UI", 9), foreground="#888888")
+        chat_label.pack(anchor=tk.W, pady=(8, 2))
+
+        chat_f = ttk.Frame(left)
+        chat_f.pack(fill=tk.BOTH, expand=True)
+        self.w_chat = tk.Text(chat_f, wrap=tk.WORD, font=("Consolas", 10),
+                              bg="#0e0e0e", fg="#d4d4d4", state=tk.DISABLED,
+                              relief=tk.FLAT, padx=6, pady=6)
+        wc_s = ttk.Scrollbar(chat_f, orient=tk.VERTICAL, command=self.w_chat.yview)
+        self.w_chat.configure(yscrollcommand=wc_s.set)
+        self.w_chat.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        wc_s.pack(side=tk.RIGHT, fill=tk.Y)
+        self.w_chat.tag_configure("user", foreground="#569cd6", font=("Consolas", 10, "bold"))
+        self.w_chat.tag_configure("assistant", foreground="#4ec9b0", font=("Consolas", 10, "bold"))
+        self.w_chat.tag_configure("body", foreground="#d4d4d4", font=("Consolas", 10))
+        self.w_chat.tag_configure("err", foreground="#f44747")
+        self.w_chat.tag_configure("sys", foreground="#dcdcaa", font=("Consolas", 9, "italic"))
+
+        self._chat_append("système", "Bienvenue ! Lancez le worker puis échangez.", "sys")
+
+        # Input area
+        inp_f = ttk.Frame(left)
+        inp_f.pack(fill=tk.X, pady=(4, 0))
+        self.w_input = tk.Text(inp_f, height=3, wrap=tk.WORD, font=("Consolas", 10),
+                               bg="#252526", fg="#d4d4d4", insertbackground="white",
+                               relief=tk.FLAT, padx=4, pady=4)
+        self.w_input.pack(side=tk.LEFT, fill=tk.X, expand=True)
+        self.w_input.bind("<Control-Return>", lambda e: self._worker_send())
+        self.w_send_btn = ttk.Button(inp_f, text="Envoyer", command=self._worker_send)
+        self.w_send_btn.pack(side=tk.RIGHT, padx=(4, 0))
+
+        # Right: status panel
+        right = ttk.Frame(panes, width=350)
+        panes.add(right, weight=1)
+        ttk.Label(right, text="Infos worker", font=("Segoe UI", 10, "bold"),
+                  foreground="#cccccc").pack(anchor=tk.W)
+        self.w_info = tk.Text(right, wrap=tk.WORD, font=("Consolas", 9),
+                              bg="#252526", fg="#d4d4d4", state=tk.DISABLED,
+                              relief=tk.FLAT, padx=6, pady=6)
+        wi_s = ttk.Scrollbar(right, orient=tk.VERTICAL, command=self.w_info.yview)
+        self.w_info.configure(yscrollcommand=wi_s.set)
+        self.w_info.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        wi_s.pack(side=tk.RIGHT, fill=tk.Y)
+        self._worker_info("Worker non lancé.\n\nLancez avec le bouton ▶\npour démarrer le serveur\nAPI local.\n\nModèle : Ministral 3 3B\nNécessite : transformers,\nmistral-common, torch\n\npip install -r worker-mini/requirements.txt")
+        self.worker_proc = None
+        self.worker_running = False
+        self.w_history = []
+
+    def _worker_info(self, text):
+        self.w_info.configure(state=tk.NORMAL)
+        self.w_info.delete(1.0, tk.END)
+        self.w_info.insert(1.0, text)
+        self.w_info.configure(state=tk.DISABLED)
+
+    def _chat_append(self, role, text, tag="body"):
+        self.w_chat.configure(state=tk.NORMAL)
+        prefix = {"user": "🧑 Vous", "assistant": "🤖 Worker", "système": "⚙ Système"}.get(role, role)
+        label = self.w_chat.tag_names()
+        self.w_chat.insert(tk.END, f"{prefix}:\n", tag)
+        self.w_chat.insert(tk.END, f"{text}\n\n", "body")
+        self.w_chat.see(tk.END)
+        self.w_chat.configure(state=tk.DISABLED)
+
+    def _worker_toggle(self):
+        if self.worker_running:
+            self._worker_stop()
+        else:
+            self._worker_start()
+
+    def _worker_start(self):
+        import subprocess as sp
+        worker_script = os.path.join(ROOT, "worker-mini", "model_worker.py")
+        if not os.path.isfile(worker_script):
+            self._chat_append("système", "worker-mini/model_worker.py introuvable", "err")
+            return
+        self._chat_append("système", "Démarrage du worker...", "sys")
+        self._worker_info("Démarrage...\n\nLe chargement du modèle\npeut prendre 1-2 minutes\nlors de la première exécution.")
+        env = os.environ.copy()
+        env["PYTHONIOENCODING"] = "utf-8"
+        self.worker_proc = sp.Popen(
+            [sys.executable, worker_script],
+            stdout=sp.PIPE, stderr=sp.STDOUT,
+            env=env, bufsize=1, text=True, encoding="utf-8", errors="replace",
+        )
+        self.worker_running = True
+        self.w_start_btn.configure(text="■ Arrêter")
+        self.worker_status_lbl.configure(text="🟡 Démarrage...", foreground="#dcdcaa")
+
+        def _monitor():
+            for line in self.worker_proc.stdout:
+                self.root.after(0, self._worker_log, line.rstrip())
+            self.worker_proc.wait()
+            self.root.after(0, self._worker_stopped)
+
+        t = threading.Thread(target=_monitor, daemon=True)
+        t.start()
+
+        def _check_ready():
+            import urllib.request
+            try:
+                resp = urllib.request.urlopen("http://localhost:8742/health", timeout=2)
+                if resp.status == 200:
+                    self.root.after(0, lambda: self.worker_status_lbl.configure(
+                        text="🟢 Prêt", foreground="#4ec9b0"))
+                    self.root.after(0, lambda: self._chat_append(
+                        "système", "Worker prêt ! Vous pouvez envoyer des messages.", "sys"))
+                    self.root.after(0, self._worker_health)
+            except Exception:
+                self.root.after(2000, _check_ready)
+
+        self.root.after(3000, _check_ready)
+
+    def _worker_log(self, line):
+        self._worker_info(self.w_info.get(1.0, tk.END).strip() + "\n" + line)
+
+    def _worker_stop(self):
+        if self.worker_proc:
+            self.worker_proc.terminate()
+            try:
+                self.worker_proc.wait(timeout=5)
+            except Exception:
+                self.worker_proc.kill()
+        self._worker_stopped()
+
+    def _worker_stopped(self):
+        self.worker_running = False
+        self.worker_proc = None
+        self.w_start_btn.configure(text="▶ Lancer")
+        self.worker_status_lbl.configure(text="🔴 Arrêté", foreground="#f44747")
+        self._chat_append("système", "Worker arrêté.", "sys")
+        self._worker_info("Worker arrêté.")
+
+    def _worker_health(self):
+        import urllib.request
+        try:
+            resp = urllib.request.urlopen("http://localhost:8742/health", timeout=3)
+            data = json_mod.loads(resp.read())
+            info = (
+                f"Statut  : {data.get('status', '?')}\n"
+                f"Modèle  : {data.get('model', '?')}\n"
+                f"GPU     : {data.get('gpu', '?')}\n"
+                f"Device  : {data.get('device', '?')}\n"
+            )
+            self._worker_info(info)
+            self.worker_status_lbl.configure(text="🟢 Prêt", foreground="#4ec9b0")
+        except Exception as e:
+            self._worker_info(f"Worker injoignable\n\n{e}")
+            if self.worker_running:
+                self.worker_status_lbl.configure(text="🟡 Démarrage...", foreground="#dcdcaa")
+
+    def _worker_send(self):
+        if not self.worker_running:
+            self._chat_append("système", "Worker non lancé. Cliquez sur ▶ Lancer d'abord.", "err")
+            return
+        text = self.w_input.get(1.0, tk.END).strip()
+        if not text:
+            return
+        self.w_input.delete(1.0, tk.END)
+        self._chat_append("user", text, "user")
+        self.w_send_btn.configure(state=tk.DISABLED)
+
+        def _query():
+            try:
+                import urllib.request
+                payload = json_mod.dumps({
+                    "messages": self.w_history + [{"role": "user", "content": text}],
+                    "temperature": 0.1,
+                    "max_tokens": 2048,
+                }).encode()
+                req = urllib.request.Request(
+                    "http://localhost:8742/v1/chat/completions",
+                    data=payload,
+                    headers={"Content-Type": "application/json"},
+                    method="POST",
+                )
+                resp = urllib.request.urlopen(req, timeout=120)
+                data = json_mod.loads(resp.read())
+                reply = data["choices"][0]["message"]["content"]
+                self.root.after(0, self._chat_append, "assistant", reply, "assistant")
+                self.w_history.append({"role": "user", "content": text})
+                self.w_history.append({"role": "assistant", "content": reply})
+                if len(self.w_history) > 20:
+                    self.w_history = self.w_history[-20:]
+            except Exception as e:
+                self.root.after(0, self._chat_append, "système", f"Erreur : {e}", "err")
+            finally:
+                self.root.after(0, lambda: self.w_send_btn.configure(state=tk.NORMAL))
+
+        t = threading.Thread(target=_query, daemon=True)
+        t.start()
+
     def on_close(self):
+        if self.worker_proc:
+            self.worker_proc.terminate()
+            try:
+                self.worker_proc.wait(timeout=3)
+            except Exception:
+                self.worker_proc.kill()
         self.root.destroy()
 
     def run(self):

@@ -1,0 +1,12 @@
+# Core
+torch>=2.4.0
+transformers>=4.49.0
+mistral-common>=1.8.6
+accelerate>=1.0.0
+
+# API server
+flask>=3.0.0
+flask-cors>=5.0.0
+
+# Optional: vLLM backend (requires GPU)
+# vllm>=0.12.0
